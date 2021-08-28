@@ -43,7 +43,7 @@ readme(char *file, char *dir)
 		(void)snprintf(file, PATH_MAX, "%s/README*", dir);
 		if (glob(file, 0, NULL, &g) != 0) {
 			globfree(&g);
-			return NULL;
+			break;
 		}
 		if (g.gl_pathc > 0) {
 			n = snprintf(file, PATH_MAX, "%s", g.gl_pathv[0]);
