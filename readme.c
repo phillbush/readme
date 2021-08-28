@@ -16,13 +16,6 @@
 #define EDITOR    "EDITOR"
 #define PAGER     "PAGER"
 
-enum {
-	MODE_HEADER,
-	MODE_CAT,
-	MODE_EDITOR,
-	MODE_PAGER
-};
-
 /* show usage and exit */
 static void
 usage(void)
