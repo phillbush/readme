@@ -1,5 +1,6 @@
 #include <ctype.h>
 #include <err.h>
+#include <errno.h>
 #include <glob.h>
 #include <limits.h>
 #include <stdio.h>
@@ -30,36 +31,43 @@ usage(void)
 	exit(1);
 }
 
-/* search for a README* file in dir or up in the directory hierarchy */
+/* search for a README* file in dir or up in the directory hierarchy; dir is modified */
 static char *
 readme(char *file, char *dir)
 {
 	glob_t g;
+	int n;
 	char *s;
 
 	for (;;) {
 		(void)snprintf(file, PATH_MAX, "%s/README*", dir);
-		if (glob(file, 0, NULL, &g) != 0)
+		if (glob(file, 0, NULL, &g) != 0) {
+			globfree(&g);
 			return NULL;
+		}
 		if (g.gl_pathc > 0) {
-			(void)snprintf(file, PATH_MAX, "%s", g.gl_pathv[0]);
+			n = snprintf(file, PATH_MAX, "%s", g.gl_pathv[0]);
 			file[PATH_MAX - 1] = '\0';
 			globfree(&g);
+			if (n >= PATH_MAX) {
+				errno = ENAMETOOLONG;
+				err(1, "%s", file);
+			}
 			return file;
-		} else {
-			globfree(&g);
 		}
-		if ((s = strrchr(dir, '/')) != NULL)
+		globfree(&g);
+		if ((s = strrchr(dir, '/')) != NULL) {
 			*s = '\0';
-		else
+		} else {
 			break;
+		}
 	}
 	return NULL;
 }
 
 /* print the header of file */
 static void
-cat(const char *file, int head)
+header(const char *file)
 {
 	FILE *fp;
 	int nlines, nchars;
@@ -72,20 +80,34 @@ cat(const char *file, int head)
 	blank = 0;
 	nchars = nlines = 0;
 	while ((ch = getc(fp)) != EOF) {
-		if (iscntrl((unsigned char)ch) && !isspace((unsigned char)ch))
-			continue;
-		if (ch == '\n' && head) {
+		if (ch == '\n') {
 			nlines++;
 			if (prev == '\n') {
 				blank++;
 			}
 		}
-		if (head) {
-			nchars++;
-			if (blank > 1 || nchars >= MAXCHARS || nlines >= MAXLINES)
-				return;
-			prev = ch;
-		}
+		nchars++;
+		if (blank > 1 || nchars >= MAXCHARS || nlines >= MAXLINES)
+			return;
+		prev = ch;
+		if (iscntrl((unsigned char)ch) && !isspace((unsigned char)ch))
+			continue;
+		putchar(ch);
+	}
+}
+
+/* print file */
+static void
+cat(const char *file)
+{
+	FILE *fp;
+	int ch;
+
+	if ((fp = fopen(file, "r")) == NULL)
+		err(1, "%s", file);
+	while ((ch = getc(fp)) != EOF) {
+		if (iscntrl((unsigned char)ch) && !isspace((unsigned char)ch))
+			continue;
 		putchar(ch);
 	}
 }
@@ -100,6 +122,7 @@ editor(const char *file)
 		if ((prog = getenv(EDITOR)) == NULL)
 			prog = DEFEDITOR;
 	execlp(prog, prog, file, NULL);
+	err(1, "%s", prog);
 }
 
 /* call pager on file */
@@ -111,28 +134,29 @@ pager(const char *file)
 	if ((prog = getenv(PAGER)) == NULL)
 		prog = DEFPAGER;
 	execlp(prog, prog, file, NULL);
+	err(1, "%s", prog);
 }
 
 /* readme: print README file for current project */
 int
 main(int argc, char *argv[])
 {
-	int mode;
+	void (*func)(const char *);
 	int ch;
 	char dir[PATH_MAX];
 	char file[PATH_MAX];
 
-	mode = MODE_HEADER;
+	func = header;
 	while ((ch = getopt(argc, argv, "cep")) != -1) {
 		switch (ch) {
 		case 'c':
-			mode = MODE_CAT;
+			func = cat;
 			break;
 		case 'e':
-			mode = MODE_EDITOR;
+			func = editor;
 			break;
 		case 'p':
-			mode = MODE_PAGER;
+			func = pager;
 			break;
 		default:
 			usage();
@@ -152,19 +176,6 @@ main(int argc, char *argv[])
 	}
 	if (readme(file, dir) == NULL)
 		return 1;
-	switch (mode) {
-	case MODE_HEADER:
-		cat(file, 1);
-		break;
-	case MODE_CAT:
-		cat(file, 0);
-		break;
-	case MODE_EDITOR:
-		editor(file);
-		break;
-	case MODE_PAGER:
-		pager(file);
-		break;
-	}
+	(*func)(file);
 	return 0;
 }
