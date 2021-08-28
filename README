@@ -7,8 +7,8 @@ SYNOPSIS
        readme [-cep] [dir]
 
 DESCRIPTION
-       readme displays to the standard output the head of the first found
-       README file in the current directory or in a directory up in the
+       readme displays to the standard output the header of the first found
+       README* file in the current directory or in a directory up in the
        directory hierarchy.  If a directory is given as argument, use it in
        place of the current directory.
 
